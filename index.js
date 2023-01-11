@@ -55,12 +55,89 @@ async function run() {
     //use post to get by ID
     app.post("/productsByKeys", async (req, res) => {
       const keys = req.body;
-      console.log(keys);
       const ids = keys.map((id) => ObjectId(id));
       const query = { _id: { $in: ids } };
       const cursor = productsCollection.find(query);
       const products = await cursor.toArray();
       res.send(products);
+    });
+
+    //post products submit
+    app.post("/addProduct", async (req, res) => {
+      const data = req.body;
+      const result = await productsCollection.insertOne(data);
+      res.send(result);
+    });
+
+    //get single Products
+    app.get("/product/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await productsCollection.findOne(query);
+      res.send(result);
+    });
+
+    //Delete Single Products
+    app.delete("/product/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: ObjectId(id) };
+      const result = await productsCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    //update Products data
+    app.put("/updateProduct/:id", async (req, res) => {
+      const data = req.body;
+      const id = req.params.id;
+      const filter = { _id: ObjectId(id) };
+      const options = { upsert: true };
+      const updateInfo = { $set: data };
+      const result = await productsCollection.updateOne(
+        filter,
+        updateInfo,
+        options
+      );
+      res.send(result);
+    });
+
+    //post order details
+    const ordersCollection = client.db("ema-john-simple").collection("orders");
+
+    const ordersHistoryCollection = client
+      .db("ema-john-simple")
+      .collection("ordersHistory");
+
+    app.post("/order", async (req, res) => {
+      const data = req.body;
+      const query = { email: data.email };
+      let result;
+      const cursor = ordersCollection.find(query);
+      const oldOrderResult = await cursor.toArray();
+      if (oldOrderResult.length !== 0) {
+        const cursorHistory = ordersHistoryCollection.find(query);
+        const orderHistory = await cursorHistory.toArray();
+
+        if (orderHistory.length !== 0) {
+          console.log("orderHistory", orderHistory);
+          orderHistory[0].orders.push(oldOrderResult[0]?.orders[0]);
+          delete orderHistory[0]._id;
+          await ordersHistoryCollection.deleteOne(query);
+          await ordersHistoryCollection.insertOne(orderHistory[0]);
+          //new orderCollection management
+          await ordersCollection.deleteOne(query);
+          result = await ordersCollection.insertOne(data);
+        } else {
+          console.log("Inside");
+          await ordersHistoryCollection.insertOne(oldOrderResult[0]);
+          //new orderCollection management
+          await ordersCollection.deleteOne(query);
+          result = await ordersCollection.insertOne(data);
+        }
+      } else {
+        result = await ordersCollection.insertOne(data);
+        console.log("Click");
+      }
+      res.send(result);
     });
   } finally {
     // await client.close();
